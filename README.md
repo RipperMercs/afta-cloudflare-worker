@@ -1,12 +1,12 @@
 # afta-cloudflare-worker
 
-Drop-in middleware for Cloudflare Workers that turns a paid handler into an [AFTA](https://github.com/RipperMercs/afta)-compliant premium endpoint with one wrapper call.
+Drop-in middleware for Cloudflare Workers that turns any paid handler into an [AFTA](https://github.com/RipperMercs/afta)-compliant endpoint with one wrapper call. AFTA is the open standard for API trade between humans, businesses, and AI agents: a code-enforceable contract that protects both sides of every paid call.
 
 ```bash
 npm install afta-cloudflare-worker afta-protocol
 ```
 
-What you get for free per endpoint:
+What the wrapper does for you, per endpoint:
 
 - HTTP 402 with proper `WWW-Authenticate` when no bearer is present
 - Bearer validation against your federation host's `/api/internal/validate`
@@ -16,7 +16,7 @@ What you get for free per endpoint:
 - Ed25519-signed receipt over the canonical-JSON form
 - Response wrapped with `receipt` + `billing` blocks
 
-All four AFTA no-charge guarantees are enforced automatically: `5xx`, `circuit_breaker`, `schema_validation_failure`, `stale_data`.
+All four AFTA no-charge guarantees are enforced automatically (`5xx`, `circuit_breaker`, `schema_validation_failure`, `stale_data`). The agent gets bounded loss and verifiable charges. The publisher gets a signed record of every call, defensible if a charge is ever disputed. Same protocol, both sides covered.
 
 ## Quick start
 
