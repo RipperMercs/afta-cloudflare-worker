@@ -1,6 +1,6 @@
 {
   "name": "afta-cloudflare-worker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Drop-in Cloudflare Workers middleware for the Agent Fair-Trade Agreement (AFTA). Wraps a paid handler with validate, run, staleness check, commit, and Ed25519-signed receipts in ~30 lines per endpoint.",
   "type": "module",
   "main": "./dist/index.js",
@@ -38,10 +38,10 @@
     "node": ">=20.0.0"
   },
   "peerDependencies": {
-    "afta-protocol": "^0.1.0"
+    "afta-protocol": "^0.1.1"
   },
   "devDependencies": {
-    "afta-protocol": "^0.1.0",
+    "afta-protocol": "^0.1.1",
     "@cloudflare/workers-types": "^4.20240405.0",
     "typescript": "^5.7.0",
     "vitest": "^1.6.0"

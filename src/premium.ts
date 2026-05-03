@@ -30,12 +30,12 @@ import {
   type NoChargeReason,
   type ReceiptCore,
 } from "afta-protocol";
-import { createFederationClient, type FederationClient } from "./federation";
+import { createFederationClient, type FederationClient } from "./federation.js";
 import type {
   AftaWorkerConfig,
   PremiumCallArgs,
   PremiumValidationFailureArgs,
-} from "./types";
+} from "./types.js";
 
 const DEFAULT_CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",

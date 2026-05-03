@@ -18,16 +18,16 @@
  * See README.md for a 30-line integration example.
  */
 
-export { createPremiumHandler } from "./premium";
-export { createFederationClient } from "./federation";
+export { createPremiumHandler } from "./premium.js";
+export { createFederationClient } from "./federation.js";
 export type {
   AftaWorkerConfig,
   PremiumCallArgs,
   PremiumValidationFailureArgs,
-} from "./types";
+} from "./types.js";
 export type {
   FederationClient,
   ValidateResponse,
   CommitResponse,
-} from "./federation";
-export type { AftaPremiumHandler } from "./premium";
+} from "./federation.js";
+export type { AftaPremiumHandler } from "./premium.js";
