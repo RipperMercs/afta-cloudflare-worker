@@ -1,0 +1,8 @@
+name = "afta-minimal-worker"
+main = "worker.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Set with:
+#   wrangler secret put SHARED_INTERNAL_SECRET
+#   wrangler secret put RECEIPT_PRIVATE_KEY_JWK

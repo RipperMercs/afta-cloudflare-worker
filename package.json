@@ -1,0 +1,55 @@
+{
+  "name": "afta-cloudflare-worker",
+  "version": "0.1.0",
+  "description": "Drop-in Cloudflare Workers middleware for the Agent Fair-Trade Agreement (AFTA). Wraps a paid handler with validate, run, staleness check, commit, and Ed25519-signed receipts in ~30 lines per endpoint.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
+  },
+  "keywords": [
+    "afta",
+    "agent-fair-trade",
+    "cloudflare-workers",
+    "ai-agents",
+    "x402",
+    "ed25519",
+    "agent-payments"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "peerDependencies": {
+    "afta-protocol": "^0.1.0"
+  },
+  "devDependencies": {
+    "afta-protocol": "file:../afta",
+    "@cloudflare/workers-types": "^4.20240405.0",
+    "typescript": "^5.7.0",
+    "vitest": "^1.6.0"
+  },
+  "homepage": "https://github.com/RipperMercs/afta-cloudflare-worker",
+  "bugs": "https://github.com/RipperMercs/afta-cloudflare-worker/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RipperMercs/afta-cloudflare-worker.git"
+  }
+}
