@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # afta-protocol is a file: peer dep until it's on npm. Clone both
+      # repos as siblings so package.json's `file:../afta` resolves.
+      - name: Checkout afta-cloudflare-worker
+        uses: actions/checkout@v4
+        with:
+          path: afta-cloudflare-worker
+
+      - name: Checkout afta-protocol
+        uses: actions/checkout@v4
+        with:
+          repository: RipperMercs/afta
+          path: afta
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build afta-protocol
+        working-directory: afta
+        run: |
+          npm install
+          npm run build
+
+      - name: Install afta-cloudflare-worker
+        working-directory: afta-cloudflare-worker
+        run: npm install
+
+      - name: Typecheck
+        working-directory: afta-cloudflare-worker
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: afta-cloudflare-worker
+        run: npm test

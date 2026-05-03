@@ -1,0 +1,13 @@
+{
+  "name": "afta-receipt-verifier-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Standalone Node script that fetches a paid AFTA endpoint, verifies the embedded Ed25519-signed receipt, and rechecks request_hash and response_hash. Has zero npm dependencies; uses node:crypto.",
+  "scripts": {
+    "start": "node verify.mjs"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
