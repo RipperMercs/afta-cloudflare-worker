@@ -1,0 +1,101 @@
+name: Publish npm
+
+# Auto-publish afta-cloudflare-worker to npm when package.json version
+# changes. Trigger:
+#   - push to main with package.json, src/**, or README.md in the diff
+#   - manual workflow_dispatch
+#
+# Auth: OIDC Trusted Publisher (no long-lived token).
+#   The npm package has a Trusted Publisher configured at:
+#     https://www.npmjs.com/package/afta-cloudflare-worker/access
+#   pointing at: Owner=RipperMercs, Repo=afta-cloudflare-worker,
+#   Workflow=publish-npm.yml.
+#
+# Behavior:
+#   - Reads version from package.json. Skips publish if that version
+#     is already on the npm registry (idempotent re-run).
+#   - --provenance attaches a cryptographic attestation that the
+#     package was built and published from this specific workflow
+#     run. Visible as "Verified provenance" on npm. Works because
+#     package.json repository.url matches this publishing repo.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'src/**'
+      - 'README.md'
+      - '.github/workflows/publish-npm.yml'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish afta-cloudflare-worker
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'RipperMercs/afta-cloudflare-worker' }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 24 ships npm 11.x by default, which has Trusted
+          # Publisher support (>=11.5.1).
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Print npm version
+        run: npm --version
+
+      - name: Read version
+        id: ver
+        run: |
+          v=$(node -p "require('./package.json').version")
+          name=$(node -p "require('./package.json').name")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "Detected $name@$v"
+
+      - name: Check if already published
+        id: check
+        run: |
+          name="${{ steps.ver.outputs.name }}"
+          v="${{ steps.ver.outputs.version }}"
+          if npm view "$name@$v" version >/dev/null 2>&1; then
+            echo "$name@$v already on npm; skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$name@$v not yet published; will publish"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install + build
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          npm ci || npm install
+          npm run build
+
+      - name: Test
+        if: steps.check.outputs.skip == 'false'
+        run: npm test
+
+      - name: Publish
+        if: steps.check.outputs.skip == 'false'
+        # Idempotent on race: if a parallel workflow run published the
+        # same version a beat earlier, npm returns 403. Treat that as
+        # success since the goal (version on npm) is achieved.
+        run: |
+          set +e
+          out=$(npm publish --access public --provenance 2>&1)
+          rc=$?
+          echo "$out"
+          if [ "$rc" -ne 0 ]; then
+            if echo "$out" | grep -q "cannot publish over the previously published versions"; then
+              echo "Already published by a parallel run; treating as success."
+              exit 0
+            fi
+            exit "$rc"
+          fi
