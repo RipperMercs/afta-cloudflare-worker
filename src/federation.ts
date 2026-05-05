@@ -12,10 +12,27 @@ export interface ValidateResponse {
   reason?: string;
   credits_remaining?: number;
   sufficient?: boolean;
+  /**
+   * Per-call reservation id returned by host workers running the
+   * 2026-05-05+ atomic-reserve federation contract. The validate call
+   * has already debited the credit balance and parked the value behind
+   * this reservation; the matching commit call MUST thread it back so
+   * the reservation can be consumed (charge) or restored (no-charge).
+   * Older host workers may omit this field; in that case the legacy
+   * race-y path applies.
+   */
+  reservation_id?: string;
 }
 
 export interface CommitResponse {
   ok: boolean;
+  /**
+   * Failure reason when ok=false. Possible values include
+   * `invalid_token`, `reservation_not_found` (reservation expired
+   * after 5 min or was already consumed), and `reservation_mismatch`
+   * (token or cost does not match the reservation; indicates a
+   * client-side bug or hostile caller).
+   */
   reason?: string;
   credits_charged?: number;
   balance_after?: number;
@@ -29,6 +46,7 @@ export interface FederationClient {
     cost: number,
     endpoint: string,
     noChargeReason: NoChargeReason,
+    reservationId?: string,
   ): Promise<CommitResponse>;
 }
 
@@ -113,23 +131,30 @@ export function createFederationClient(opts: ClientOptions): FederationClient {
       }
     },
 
-    async commit(token, cost, endpoint, noChargeReason) {
+    async commit(token, cost, endpoint, noChargeReason, reservationId) {
       if (!opts.sharedSecret) {
         return { ok: false, reason: "billing_unavailable" };
       }
       try {
+        const body: Record<string, unknown> = {
+          token,
+          cost,
+          endpoint,
+          no_charge_reason: noChargeReason ?? null,
+        };
+        // Thread the reservation_id when the validate call returned one
+        // so the host worker consumes the per-call reservation atomically
+        // (race-safe path). Hosts running pre-2026-05-05 code that did
+        // not return a reservation_id continue to work via the legacy
+        // race-y path.
+        if (reservationId) body.reservation_id = reservationId;
         const res = await fetchWithTimeout(opts.commitUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "X-Internal-Auth": opts.sharedSecret,
           },
-          body: JSON.stringify({
-            token,
-            cost,
-            endpoint,
-            no_charge_reason: noChargeReason ?? null,
-          }),
+          body: JSON.stringify(body),
         });
         if (!res.ok) return { ok: false, reason: "billing_unavailable" };
         const json = (await res.json()) as CommitResponse;

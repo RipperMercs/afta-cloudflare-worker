@@ -192,6 +192,13 @@ export function createPremiumHandler(
       typeof validate.credits_remaining === "number"
         ? validate.credits_remaining
         : 0;
+    // Capture the per-call reservation id (post-2026-05-05 atomic-reserve
+    // federation contract). The validate call has already debited the
+    // balance; we must thread this id back to commit so the reservation
+    // is either consumed (charge) or restored (no-charge). Hosts running
+    // older code may omit reservation_id, in which case undefined falls
+    // through and the host's legacy commit path applies.
+    const reservationId = validate.reservation_id;
 
     let bodyResult: Record<string, unknown>;
     let noChargeReason: NoChargeReason = null;
@@ -237,6 +244,7 @@ export function createPremiumHandler(
       cost,
       commitEndpoint,
       noChargeReason,
+      reservationId,
     );
     let creditsCharged: number;
     let creditsRemaining: number;
@@ -252,6 +260,19 @@ export function createPremiumHandler(
           ? commit.balance_after
           : currentBalance - (noChargeReason ? 0 : cost);
     } else {
+      // Surface the most-actionable reservation failures in worker logs
+      // so downstream operators can spot bugs vs. expected expirations.
+      if (commit.reason === "reservation_not_found") {
+        console.warn(
+          `afta-premium ${endpoint}: reservation_not_found ` +
+            `(handler exceeded 5min TTL or commit double-fired)`,
+        );
+      } else if (commit.reason === "reservation_mismatch") {
+        console.error(
+          `afta-premium ${endpoint}: reservation_mismatch ` +
+            `(token or cost differs from validated reservation; investigate)`,
+        );
+      }
       noChargeReason = noChargeReason ?? "circuit_breaker";
       creditsCharged = 0;
       creditsRemaining = currentBalance;

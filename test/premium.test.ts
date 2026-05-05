@@ -374,4 +374,131 @@ describe("createPremiumHandler", () => {
     expect(body.receipt).toBeNull();
     expect(body.billing.credits_charged).toBe(5);
   });
+
+  // ── Reservation flow (post-2026-05-05 atomic-reserve federation) ──
+  //
+  // Verifies that when a host worker returns reservation_id from
+  // validate, the commit call threads it back. Closes the federation
+  // double-spend race that motivated the host-side patch (TF commit
+  // a1883df, 2026-05-05).
+
+  it("threads reservation_id from validate response into commit body", async () => {
+    let observedCommitBody: { reservation_id?: string } | null = null;
+    mockFetch({
+      [VALIDATE_URL]: () => ({
+        status: 200,
+        body: {
+          ok: true,
+          sufficient: true,
+          credits_remaining: 99,
+          reservation_id: "tf-reservation-abc123",
+        },
+      }),
+      [COMMIT_URL]: (body) => {
+        observedCommitBody = body as { reservation_id?: string };
+        return {
+          status: 200,
+          body: { ok: true, credits_charged: 1, balance_after: 99, no_charge_reason: null },
+        };
+      },
+    });
+    const handler = createPremiumHandler(configWith());
+    const res = await handler({
+      request: makeRequest("/api/premium/test", { bearer: "tk_abc" }),
+      endpoint: "/api/premium/test",
+      cost: 1,
+      handler: async () => ({ ok: true, captured_at: new Date().toISOString() }),
+    });
+    expect(res.status).toBe(200);
+    expect(observedCommitBody).not.toBeNull();
+    expect(observedCommitBody!.reservation_id).toBe("tf-reservation-abc123");
+  });
+
+  it("omits reservation_id from commit body when validate did not return one (legacy host)", async () => {
+    let observedCommitBody: Record<string, unknown> | null = null;
+    mockFetch({
+      [VALIDATE_URL]: () => ({
+        status: 200,
+        body: { ok: true, sufficient: true, credits_remaining: 50 },
+      }),
+      [COMMIT_URL]: (body) => {
+        observedCommitBody = body as Record<string, unknown>;
+        return {
+          status: 200,
+          body: { ok: true, credits_charged: 1, balance_after: 49, no_charge_reason: null },
+        };
+      },
+    });
+    const handler = createPremiumHandler(configWith());
+    await handler({
+      request: makeRequest("/api/premium/test", { bearer: "tk_abc" }),
+      endpoint: "/api/premium/test",
+      cost: 1,
+      handler: async () => ({ ok: true, captured_at: new Date().toISOString() }),
+    });
+    expect(observedCommitBody).not.toBeNull();
+    expect("reservation_id" in observedCommitBody!).toBe(false);
+  });
+
+  it("logs a warning and falls back to no_charge_reason on reservation_not_found", async () => {
+    mockFetch({
+      [VALIDATE_URL]: () => ({
+        status: 200,
+        body: {
+          ok: true,
+          sufficient: true,
+          credits_remaining: 99,
+          reservation_id: "tf-reservation-expired",
+        },
+      }),
+      [COMMIT_URL]: () => ({
+        status: 200,
+        body: { ok: false, reason: "reservation_not_found" },
+      }),
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const handler = createPremiumHandler(configWith());
+    const res = await handler({
+      request: makeRequest("/api/premium/test", { bearer: "tk_abc" }),
+      endpoint: "/api/premium/test",
+      cost: 1,
+      handler: async () => ({ ok: true, captured_at: new Date().toISOString() }),
+    });
+    warnSpy.mockRestore();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { billing: { credits_charged: number; no_charge_reason: string } };
+    // Defensive fallback: when commit fails but the handler succeeded,
+    // the wrapper records circuit_breaker as the no-charge reason so
+    // the agent is not billed.
+    expect(body.billing.credits_charged).toBe(0);
+    expect(body.billing.no_charge_reason).toBe("circuit_breaker");
+  });
+
+  it("validationFailure path commits without reservation_id (no validate ran)", async () => {
+    let observedCommitBody: Record<string, unknown> | null = null;
+    mockFetch({
+      [COMMIT_URL]: (body) => {
+        observedCommitBody = body as Record<string, unknown>;
+        return {
+          status: 200,
+          body: { ok: true, credits_charged: 0, balance_after: 99, no_charge_reason: "schema_validation_failure" },
+        };
+      },
+    });
+    const handler = createPremiumHandler(configWith());
+    const res = await handler.validationFailure({
+      request: makeRequest("/api/premium/test", { bearer: "tk_abc" }),
+      endpoint: "/api/premium/test",
+      cost: 1,
+      message: "missing required parameter `task`",
+    });
+    expect(res.status).toBe(400);
+    expect(observedCommitBody).not.toBeNull();
+    // No validate happens before validationFailure, so no reservation
+    // exists to thread through. The host's legacy commit path handles
+    // standalone schema-validation no-charge events without a
+    // reservation; this is correct.
+    expect("reservation_id" in observedCommitBody!).toBe(false);
+    expect(observedCommitBody!.no_charge_reason).toBe("schema_validation_failure");
+  });
 });
